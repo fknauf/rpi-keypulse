@@ -1,9 +1,12 @@
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::signal::unix::{signal, SignalKind};
-use evdev::{ Device, EventSummary };
-use rppal::gpio::{ Gpio, OutputPin };
+use evdev::{ Device, EventType };
 use clap::Parser;
+use tokio_util::task::TaskTracker;
+
+#[cfg(feature = "gpio")]
+use rppal::gpio::{ Gpio, Pin };
 
 /// Pulse on a GPIO pin every time a key is pressed
 #[derive(Parser)]
@@ -14,6 +17,7 @@ struct Args {
     device: String,
 
     /// Number of the GPIO pin to pulse
+    #[cfg(feature = "gpio")]
     #[arg(short, long)]
     pin: u8,
 
@@ -22,45 +26,74 @@ struct Args {
     pulse_length_us: u64
 }
 
-async fn plopp(mut pin: OutputPin, pulse_us: u64) {
-    pin.set_high();
-    sleep(Duration::from_micros(pulse_us)).await;
-    pin.set_low();
+#[cfg(feature = "gpio")]
+async fn plopp(
+    maybe_pin: Result<Pin, rppal::gpio::Error>,
+    pulse_length: Duration
+) {
+    match maybe_pin {
+        Ok(pin) => {
+            let mut out = pin.into_output();
+
+            out.set_high();
+            sleep(pulse_length).await;
+            out.set_low();
+        },
+        Err(_) => {
+            println!("Typing too fast! GPIO pin is still in use.");
+        }
+    }
 }
+
+#[cfg(not(feature = "gpio"))]
+async fn plopp(
+    pulse_length: Duration
+) {
+    println!("pin up");
+    sleep(pulse_length).await;
+    println!("pin down");
+}
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    let pulse_length = Duration::from_micros(args.pulse_length_us);
     let dev = Device::open(args.device)?;
     let mut events = dev.into_event_stream()?;
     let mut sigterm = signal(SignalKind::terminate())?;
+    let tracker = TaskTracker::new();
+
+    #[cfg(feature = "gpio")]
     let gpio = Gpio::new()?;
 
     // init: configure so that transistor's gate is always driven into the ground when no keys are pressed.
+    #[cfg(feature = "gpio")]
     gpio.get(args.pin)?.into_output_low().set_reset_on_drop(false);
 
     loop {
+        // If you ask me, this should be part of the evdev crate. But it isn't, so 
+        // I make my own named constant with blackjack and hookers.
+        const KEYPRESS_DOWN : i32 = 1;
+
         tokio::select! {
             Ok(ev) = events.next_event() => {
-                match ev.destructure() {
-                    EventSummary::Key(_, _, 1) => {
-                        match gpio.get(args.pin) {
-                            Ok(pin) => {
-                                tokio::spawn(plopp(pin.into_output(), args.pulse_length_us));
-                            },
-                            Err(_) => {
-                                println!("Typing too fast! GPIO pin is still in use.");
-                            }
-                        }
-                    },
-                    _ => ()
+                if ev.event_type() == EventType::KEY && ev.value() == KEYPRESS_DOWN {
+                    #[cfg(feature = "gpio")]
+                    tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
+
+                    #[cfg(not(feature = "gpio"))]
+                    tracker.spawn(plopp(pulse_length));
                 }
             },
             _ = tokio::signal::ctrl_c() => { break }
             _ = sigterm.recv() => { break }
         }
     }
+
+    tracker.close();
+    tracker.wait().await;
 
     Ok(())
 }
