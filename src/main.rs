@@ -1,8 +1,23 @@
 use std::time::Duration;
 use tokio::time::sleep;
 use evdev::{ Device, EventSummary };
+use rppal::gpio::{ Gpio, Pin };
+use clap::Parser;
 
-async fn plopp() {
+/// Pulse on a GPIO pin every time a key is pressed
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Device node for the keyboard
+    #[arg(short, long, default_value = "/dev/input/event0")]
+    device: String,
+
+    /// Number of the GPIO pin to pulse
+    #[arg(short, long)]
+    pin: u8
+}
+
+async fn plopp(_: Pin) {
     println!("pin down");
     sleep(Duration::from_millis(1)).await;
     println!("pin up");
@@ -10,17 +25,25 @@ async fn plopp() {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dev_path = std::env::args().nth(1).expect("No device specified. Specify /dev/input/event# as first argument.");
+    let args = Args::parse();
 
-    let dev = Device::open(dev_path).unwrap();
+    let dev = Device::open(args.device)?;
     let mut events = dev.into_event_stream()?;
+    let gpio = Gpio::new()?;
 
     loop {
         let ev = events.next_event().await?;
 
         match ev.destructure() {
             EventSummary::Key(_, _, 1) => {
-                tokio::spawn(plopp());
+                match gpio.get(args.pin) {
+                    Ok(pin) => {
+                        tokio::spawn(plopp(pin));
+                    },
+                    Err(_) => {
+                        println!("Typing too fast! GPIO pin is still in use.");
+                    }
+                }
             },
             _ => ()
         }

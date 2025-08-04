@@ -1,8 +1,10 @@
 [package]
-name = "solenoid"
+name = "rpi-keypulse"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = [ "full" ] }
 evdev = { version = "0.13.1", features = [ "tokio" ] }
+clap = { version = "4.5.42", features = [ "derive" ] }
+rppal = { version = "0.22.1" }
