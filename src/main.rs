@@ -1,5 +1,6 @@
 use std::time::Duration;
 use tokio::time::sleep;
+use tokio::signal::unix::{signal, SignalKind};
 use evdev::{ Device, EventSummary };
 use rppal::gpio::{ Gpio, OutputPin };
 use clap::Parser;
@@ -33,23 +34,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dev = Device::open(args.device)?;
     let mut events = dev.into_event_stream()?;
+    let mut sigterm = signal(SignalKind::terminate())?;
     let gpio = Gpio::new()?;
 
     loop {
-        let ev = events.next_event().await?;
-
-        match ev.destructure() {
-            EventSummary::Key(_, _, 1) => {
-                match gpio.get(args.pin) {
-                    Ok(pin) => {
-                        tokio::spawn(plopp(pin.into_output(), args.pulse_length_us));
+        tokio::select! {
+            Ok(ev) = events.next_event() => {
+                match ev.destructure() {
+                    EventSummary::Key(_, _, 1) => {
+                        match gpio.get(args.pin) {
+                            Ok(pin) => {
+                                tokio::spawn(plopp(pin.into_output(), args.pulse_length_us));
+                            },
+                            Err(_) => {
+                                println!("Typing too fast! GPIO pin is still in use.");
+                            }
+                        }
                     },
-                    Err(_) => {
-                        println!("Typing too fast! GPIO pin is still in use.");
-                    }
+                    _ => ()
                 }
             },
-            _ => ()
+            _ = tokio::signal::ctrl_c() => { break }
+            _ = sigterm.recv() => { break }
         }
     }
+
+    Ok(())
 }
