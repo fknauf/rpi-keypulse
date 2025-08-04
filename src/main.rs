@@ -37,6 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sigterm = signal(SignalKind::terminate())?;
     let gpio = Gpio::new()?;
 
+    // init: configure so that transistor's gate is always driven into the ground when no keys are pressed.
+    gpio.get(args.pin)?.into_output_low().set_reset_on_drop(false);
+
     loop {
         tokio::select! {
             Ok(ev) = events.next_event() => {
