@@ -14,12 +14,16 @@ struct Args {
 
     /// Number of the GPIO pin to pulse
     #[arg(short, long)]
-    pin: u8
+    pin: u8,
+
+    /// Length of the pulse in microseconds
+    #[arg(short = 'l', long, default_value_t = 1000)]
+    pulse_length_us: u64
 }
 
-async fn plopp(mut pin: OutputPin) {
+async fn plopp(mut pin: OutputPin, pulse_us: u64) {
     pin.set_high();
-    sleep(Duration::from_millis(1)).await;
+    sleep(Duration::from_micros(pulse_us)).await;
     pin.set_low();
 }
 
@@ -38,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             EventSummary::Key(_, _, 1) => {
                 match gpio.get(args.pin) {
                     Ok(pin) => {
-                        tokio::spawn(plopp(pin.into_output()));
+                        tokio::spawn(plopp(pin.into_output(), args.pulse_length_us));
                     },
                     Err(_) => {
                         println!("Typing too fast! GPIO pin is still in use.");
