@@ -18,9 +18,9 @@ struct Args {
 }
 
 async fn plopp(mut pin: OutputPin) {
-    pin.set_low();
-    sleep(Duration::from_millis(1)).await;
     pin.set_high();
+    sleep(Duration::from_millis(1)).await;
+    pin.set_low();
 }
 
 #[tokio::main]
