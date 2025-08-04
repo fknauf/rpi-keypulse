@@ -1,7 +1,7 @@
 use std::time::Duration;
 use tokio::time::sleep;
 use evdev::{ Device, EventSummary };
-use rppal::gpio::{ Gpio, Pin };
+use rppal::gpio::{ Gpio, OutputPin };
 use clap::Parser;
 
 /// Pulse on a GPIO pin every time a key is pressed
@@ -17,10 +17,10 @@ struct Args {
     pin: u8
 }
 
-async fn plopp(_: Pin) {
-    println!("pin down");
+async fn plopp(mut pin: OutputPin) {
+    pin.set_low();
     sleep(Duration::from_millis(1)).await;
-    println!("pin up");
+    pin.set_high();
 }
 
 #[tokio::main]
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             EventSummary::Key(_, _, 1) => {
                 match gpio.get(args.pin) {
                     Ok(pin) => {
-                        tokio::spawn(plopp(pin));
+                        tokio::spawn(plopp(pin.into_output()));
                     },
                     Err(_) => {
                         println!("Typing too fast! GPIO pin is still in use.");
