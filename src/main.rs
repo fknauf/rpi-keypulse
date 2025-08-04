@@ -8,6 +8,11 @@ use tokio_util::task::TaskTracker;
 #[cfg(feature = "gpio")]
 use rppal::gpio::{ Gpio, Pin };
 
+#[cfg(not(feature = "gpio"))]
+mod dummy_gpio;
+#[cfg(not(feature = "gpio"))]
+use dummy_gpio::{ Gpio, Pin };
+
 /// Pulse on a GPIO pin every time a key is pressed
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -17,7 +22,6 @@ struct Args {
     device: String,
 
     /// Number of the GPIO pin to pulse
-    #[cfg(feature = "gpio")]
     #[arg(short, long)]
     pin: u8,
 
@@ -26,7 +30,6 @@ struct Args {
     pulse_length_us: u64
 }
 
-#[cfg(feature = "gpio")]
 async fn plopp(
     maybe_pin: Result<Pin, rppal::gpio::Error>,
     pulse_length: Duration
@@ -45,16 +48,6 @@ async fn plopp(
     }
 }
 
-#[cfg(not(feature = "gpio"))]
-async fn plopp(
-    pulse_length: Duration
-) {
-    println!("pin up");
-    sleep(pulse_length).await;
-    println!("pin down");
-}
-
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
@@ -65,11 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sigterm = signal(SignalKind::terminate())?;
     let tracker = TaskTracker::new();
 
-    #[cfg(feature = "gpio")]
     let gpio = Gpio::new()?;
 
     // init: configure so that transistor's gate is always driven into the ground when no keys are pressed.
-    #[cfg(feature = "gpio")]
     gpio.get(args.pin)?.into_output_low().set_reset_on_drop(false);
 
     loop {
@@ -80,11 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::select! {
             Ok(ev) = events.next_event() => {
                 if ev.event_type() == EventType::KEY && ev.value() == KEYPRESS_DOWN {
-                    #[cfg(feature = "gpio")]
                     tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
-
-                    #[cfg(not(feature = "gpio"))]
-                    tracker.spawn(plopp(pulse_length));
                 }
             },
             _ = tokio::signal::ctrl_c() => { break }
