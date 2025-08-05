@@ -22,7 +22,7 @@ struct Args {
     device: String,
 
     /// Number of the GPIO pin to pulse
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = 26)]
     pin: u8,
 
     /// Length of the pulse in microseconds
