@@ -1,17 +1,17 @@
-use std::time::Duration;
-use tokio::time::sleep;
-use tokio::signal::unix::{signal, SignalKind};
-use evdev::{ Device, EventType };
 use clap::Parser;
+use evdev::{Device, EventType};
+use std::time::Duration;
+use tokio::signal::unix::{SignalKind, signal};
+use tokio::time::sleep;
 use tokio_util::task::TaskTracker;
 
 #[cfg(feature = "gpio")]
-use rppal::gpio::{ Gpio, Pin };
+use rppal::gpio::{Gpio, Pin};
 
 #[cfg(not(feature = "gpio"))]
 mod dummy_gpio;
 #[cfg(not(feature = "gpio"))]
-use dummy_gpio::{ Gpio, Pin };
+use dummy_gpio::{Gpio, Pin};
 
 /// Pulse on a GPIO pin every time a key is pressed
 #[derive(Parser)]
@@ -27,13 +27,10 @@ struct Args {
 
     /// Length of the pulse in microseconds
     #[arg(short = 'l', long, default_value_t = 1000)]
-    pulse_length_us: u64
+    pulse_length_us: u64,
 }
 
-async fn plopp(
-    maybe_pin: Result<Pin, rppal::gpio::Error>,
-    pulse_length: Duration
-) {
+async fn plopp(maybe_pin: Result<Pin, rppal::gpio::Error>, pulse_length: Duration) {
     match maybe_pin {
         Ok(pin) => {
             let mut out = pin.into_output();
@@ -41,7 +38,7 @@ async fn plopp(
             out.set_high();
             sleep(pulse_length).await;
             out.set_low();
-        },
+        }
         Err(_) => {
             println!("Typing too fast! GPIO pin is still in use.");
         }
@@ -61,12 +58,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gpio = Gpio::new()?;
 
     // init: configure so that transistor's gate is always driven into the ground when no keys are pressed.
-    gpio.get(args.pin)?.into_output_low().set_reset_on_drop(false);
+    gpio.get(args.pin)?
+        .into_output_low()
+        .set_reset_on_drop(false);
 
     loop {
-        // If you ask me, this should be part of the evdev crate. But it isn't, so 
+        // If you ask me, this should be part of the evdev crate. But it isn't, so
         // I make my own named constant with blackjack and hookers.
-        const KEYPRESS_DOWN : i32 = 1;
+        const KEYPRESS_DOWN: i32 = 1;
 
         tokio::select! {
             Ok(ev) = events.next_event() => {

@@ -1,10 +1,10 @@
 use rppal::gpio::Error;
 
-pub struct Gpio { }
+pub struct Gpio {}
 
-pub struct Pin { }
+pub struct Pin {}
 
-pub struct OutputPin { }
+pub struct OutputPin {}
 
 impl Gpio {
     pub fn new() -> Result<Gpio, Error> {
@@ -18,11 +18,11 @@ impl Gpio {
 
 impl Pin {
     pub fn into_output(self: Self) -> OutputPin {
-        OutputPin{}
+        OutputPin {}
     }
 
     pub fn into_output_low(self: Self) -> OutputPin {
-        OutputPin{}
+        OutputPin {}
     }
 }
 
