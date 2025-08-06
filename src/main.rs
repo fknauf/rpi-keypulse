@@ -3,6 +3,7 @@ use evdev::{Device, EventType};
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
+use tokio_stream::{StreamExt, StreamMap};
 use tokio_util::task::TaskTracker;
 
 #[cfg(feature = "gpio")]
@@ -17,9 +18,10 @@ use dummy_gpio::{Gpio, Pin};
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Device node for the keyboard
-    #[arg(short, long, default_value = "/dev/input/event0")]
-    device: String,
+    /// Device node for the keyboard, e.g. /dev/input/event0.
+    /// If not specified, all devices will be polled for keyboard events.
+    #[arg(short, long)]
+    device: Option<String>,
 
     /// Number of the GPIO pin to pulse
     #[arg(short, long, default_value_t = 26)]
@@ -28,6 +30,14 @@ struct Args {
     /// Length of the pulse in microseconds
     #[arg(short = 'l', long, default_value_t = 1000)]
     pulse_length_us: u64,
+}
+
+fn open_keyboard(devpath_arg: Option<String>) -> Result<Vec<Device>, std::io::Error> {
+    if let Some(devpath) = devpath_arg {
+        Device::open(devpath).and_then(|dev| Ok(vec![dev]))
+    } else {
+        Ok(evdev::enumerate().map(|t| t.1).collect())
+    }
 }
 
 async fn plopp(maybe_pin: Result<Pin, rppal::gpio::Error>, pulse_length: Duration) {
@@ -50,12 +60,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let pulse_length = Duration::from_micros(args.pulse_length_us);
-    let dev = Device::open(args.device)?;
-    let mut events = dev.into_event_stream()?;
     let mut sigterm = signal(SignalKind::terminate())?;
     let tracker = TaskTracker::new();
-
     let gpio = Gpio::new()?;
+    let devices = open_keyboard(args.device)?;
+
+    let mut events = devices
+        .into_iter()
+        .filter_map(|dev| dev.into_event_stream().ok())
+        .enumerate()
+        .collect::<StreamMap<_, _>>();
 
     // init: configure so that transistor's gate is always driven into the ground when no keys are pressed.
     gpio.get(args.pin)?
@@ -68,11 +82,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         const KEYPRESS_DOWN: i32 = 1;
 
         tokio::select! {
-            Ok(ev) = events.next_event() => {
+            Some((_, Ok(ev))) = events.next() => {
                 if ev.event_type() == EventType::KEY && ev.value() == KEYPRESS_DOWN {
                     tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
                 }
-            },
+            }
             _ = tokio::signal::ctrl_c() => { break }
             _ = sigterm.recv() => { break }
         }
