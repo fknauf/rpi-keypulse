@@ -28,7 +28,7 @@ struct Args {
     pin: u8,
 
     /// Length of the pulse in microseconds
-    #[arg(short = 'l', long, default_value_t = 1000)]
+    #[arg(short = 'l', long, default_value_t = 30000)]
     pulse_length_us: u64,
 }
 
