@@ -115,12 +115,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
 
                         key_state.insert(normalize_modifier(code));
-
+                    },
+                    EventSummary::Key(_, code, KEYPRESS_UP) => {
                         if key_state == activation_keycombo {
                             plopp_active = !plopp_active;
                         }
-                    },
-                    EventSummary::Key(_, code, KEYPRESS_UP) => {
+
                         let normalized_code = normalize_modifier(code);
                         key_state.remove(&normalized_code);
                     },
