@@ -31,6 +31,10 @@ struct Args {
     /// Length of the pulse in microseconds
     #[arg(short = 'l', long, default_value_t = 30000)]
     pulse_length_us: u64,
+
+    /// Make GPIO pulses active at program startup
+    #[arg(long)]
+    start_active: bool,
 }
 
 fn open_keyboard(devpath_arg: Option<String>) -> Result<Vec<Device>, std::io::Error> {
@@ -83,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         KeyCode::KEY_LEFTMETA,
         KeyCode::KEY_S,
     ]);
-    let mut plopp_active = false;
+    let mut plopp_active = args.start_active;
 
     let mut events = devices
         .into_iter()
