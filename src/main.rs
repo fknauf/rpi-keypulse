@@ -1,5 +1,5 @@
 use clap::Parser;
-use evdev::{Device, EventSummary, EventType, KeyCode};
+use evdev::{Device, EventSummary, KeyCode};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some((_, Ok(ev))) = events.next() => {
                 match ev.destructure() {
                     EventSummary::Key(_, code, KEYPRESS_DOWN) => {
-                        if plopp_active && ev.event_type() == EventType::KEY && ev.value() == KEYPRESS_DOWN {
+                        if plopp_active {
                             tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
                         }
 
