@@ -1,5 +1,6 @@
 use clap::Parser;
-use evdev::{Device, EventType};
+use evdev::{Device, EventSummary, EventType, KeyCode};
+use std::collections::HashSet;
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
@@ -40,6 +41,16 @@ fn open_keyboard(devpath_arg: Option<String>) -> Result<Vec<Device>, std::io::Er
     }
 }
 
+fn normalize_modifier(code: KeyCode) -> KeyCode {
+    match code {
+        KeyCode::KEY_RIGHTCTRL => KeyCode::KEY_LEFTCTRL,
+        KeyCode::KEY_RIGHTALT => KeyCode::KEY_LEFTALT,
+        KeyCode::KEY_RIGHTMETA => KeyCode::KEY_LEFTMETA,
+        KeyCode::KEY_RIGHTSHIFT => KeyCode::KEY_LEFTSHIFT,
+        other => other,
+    }
+}
+
 async fn plopp(maybe_pin: Result<Pin, rppal::gpio::Error>, pulse_length: Duration) {
     match maybe_pin {
         Ok(pin) => {
@@ -65,6 +76,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gpio = Gpio::new()?;
     let devices = open_keyboard(args.device)?;
 
+    let mut key_state = HashSet::new();
+    let activation_keycombo = HashSet::from([
+        KeyCode::KEY_LEFTSHIFT,
+        KeyCode::KEY_LEFTCTRL,
+        KeyCode::KEY_LEFTMETA,
+        KeyCode::KEY_S,
+    ]);
+    let mut plopp_active = false;
+
     let mut events = devices
         .into_iter()
         .filter_map(|dev| dev.into_event_stream().ok())
@@ -79,12 +99,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         // If you ask me, this should be part of the evdev crate. But it isn't, so
         // I make my own named constant with blackjack and hookers.
+        const KEYPRESS_UP: i32 = 0;
         const KEYPRESS_DOWN: i32 = 1;
 
         tokio::select! {
             Some((_, Ok(ev))) = events.next() => {
-                if ev.event_type() == EventType::KEY && ev.value() == KEYPRESS_DOWN {
-                    tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
+                match ev.destructure() {
+                    EventSummary::Key(_, code, KEYPRESS_DOWN) => {
+                        if plopp_active && ev.event_type() == EventType::KEY && ev.value() == KEYPRESS_DOWN {
+                            tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
+                        }
+
+                        key_state.insert(normalize_modifier(code));
+
+                        if key_state == activation_keycombo {
+                            plopp_active = !plopp_active;
+                        }
+                    },
+                    EventSummary::Key(_, code, KEYPRESS_UP) => {
+                        let normalized_code = normalize_modifier(code);
+                        key_state.remove(&normalized_code);
+                    },
+                    _ => {}
                 }
             }
             _ = tokio::signal::ctrl_c() => { break }
