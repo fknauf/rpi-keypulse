@@ -35,6 +35,10 @@ struct Args {
     /// Make GPIO pulses active at program startup
     #[arg(long)]
     start_active: bool,
+
+    /// By default, modifier keys and Esc don't cause a pulse. This flag makes them behave like regular keys.
+    #[arg(long)]
+    no_dead_keys: bool,
 }
 
 fn open_keyboard(devpath_arg: Option<String>) -> Result<Vec<Device>, std::io::Error> {
@@ -53,6 +57,84 @@ fn normalize_modifier(code: KeyCode) -> KeyCode {
         KeyCode::KEY_RIGHTSHIFT => KeyCode::KEY_LEFTSHIFT,
         other => other,
     }
+}
+
+fn is_plopping_key(code: KeyCode, no_dead_keys: bool) -> bool {
+    let key = normalize_modifier(code);
+    let dead_keys = [
+        KeyCode::KEY_ESC,
+        KeyCode::KEY_LEFTCTRL,
+        KeyCode::KEY_LEFTALT,
+        KeyCode::KEY_LEFTMETA,
+        KeyCode::KEY_LEFTSHIFT,
+    ];
+    let non_kbd_keys = [
+        KeyCode::BTN_0,
+        KeyCode::BTN_1,
+        KeyCode::BTN_2,
+        KeyCode::BTN_3,
+        KeyCode::BTN_4,
+        KeyCode::BTN_5,
+        KeyCode::BTN_6,
+        KeyCode::BTN_7,
+        KeyCode::BTN_8,
+        KeyCode::BTN_9,
+        KeyCode::BTN_LEFT,
+        KeyCode::BTN_RIGHT,
+        KeyCode::BTN_MIDDLE,
+        KeyCode::BTN_SIDE,
+        KeyCode::BTN_EXTRA,
+        KeyCode::BTN_FORWARD,
+        KeyCode::BTN_BACK,
+        KeyCode::BTN_TASK,
+        KeyCode::BTN_TRIGGER,
+        KeyCode::BTN_THUMB,
+        KeyCode::BTN_THUMB2,
+        KeyCode::BTN_TOP,
+        KeyCode::BTN_TOP2,
+        KeyCode::BTN_PINKIE,
+        KeyCode::BTN_BASE,
+        KeyCode::BTN_BASE2,
+        KeyCode::BTN_BASE3,
+        KeyCode::BTN_BASE4,
+        KeyCode::BTN_BASE5,
+        KeyCode::BTN_BASE6,
+        KeyCode::BTN_DEAD,
+        KeyCode::BTN_SOUTH,
+        KeyCode::BTN_EAST,
+        KeyCode::BTN_C,
+        KeyCode::BTN_NORTH,
+        KeyCode::BTN_WEST,
+        KeyCode::BTN_Z,
+        KeyCode::BTN_TL,
+        KeyCode::BTN_TR,
+        KeyCode::BTN_TL2,
+        KeyCode::BTN_TR2,
+        KeyCode::BTN_SELECT,
+        KeyCode::BTN_START,
+        KeyCode::BTN_MODE,
+        KeyCode::BTN_THUMBL,
+        KeyCode::BTN_THUMBR,
+        KeyCode::BTN_TOOL_PEN,
+        KeyCode::BTN_TOOL_RUBBER,
+        KeyCode::BTN_TOOL_BRUSH,
+        KeyCode::BTN_TOOL_PENCIL,
+        KeyCode::BTN_TOOL_AIRBRUSH,
+        KeyCode::BTN_TOOL_FINGER,
+        KeyCode::BTN_TOOL_MOUSE,
+        KeyCode::BTN_TOOL_LENS,
+        KeyCode::BTN_TOOL_QUINTTAP,
+        KeyCode::BTN_TOUCH,
+        KeyCode::BTN_STYLUS,
+        KeyCode::BTN_STYLUS2,
+        KeyCode::BTN_TOOL_DOUBLETAP,
+        KeyCode::BTN_TOOL_TRIPLETAP,
+        KeyCode::BTN_TOOL_QUADTAP,
+        KeyCode::BTN_GEAR_DOWN,
+        KeyCode::BTN_GEAR_UP,
+    ];
+
+    !non_kbd_keys.contains(&key) && (no_dead_keys || !dead_keys.contains(&key))
 }
 
 async fn plopp(maybe_pin: Result<Pin, rppal::gpio::Error>, pulse_length: Duration) {
@@ -110,7 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some((_, Ok(ev))) = events.next() => {
                 match ev.destructure() {
                     EventSummary::Key(_, code, KEYPRESS_DOWN) => {
-                        if plopp_active {
+                        if plopp_active && is_plopping_key(code, args.no_dead_keys) {
                             tracker.spawn(plopp(gpio.get(args.pin), pulse_length));
                         }
 
