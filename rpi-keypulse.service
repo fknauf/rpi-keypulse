@@ -1,0 +1,10 @@
+[Unit]
+Description=Raspberry Pi GPIO pulse on keypress
+
+[Service]
+Type=exec
+ExecStart=rpi-keypulse --start-active
+TimeoutStopSec=5
+
+[Install]
+WantedBy=default.target
