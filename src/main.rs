@@ -41,10 +41,9 @@ struct Args {
 
 fn open_hotplug_stream() -> Result<inotify::EventStream<[u8; 4096]>, std::io::Error> {
     let inotify = Inotify::init()?;
-    inotify.watches().add(
-        "/dev/input",
-        WatchMask::CREATE | WatchMask::DELETE,
-    )?;
+    inotify
+        .watches()
+        .add("/dev/input", WatchMask::CREATE | WatchMask::DELETE)?;
     inotify.into_event_stream([0; 4096])
 }
 
