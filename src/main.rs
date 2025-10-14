@@ -30,7 +30,7 @@ struct Args {
     #[arg(short = 'l', long, default_value_t = 30000)]
     pulse_length_us: u64,
 
-    /// Make GPIO pulses active at program startup
+    /// Make GPIO pulses inactive at program startup (until the activation shortcut is pressed)
     #[arg(long)]
     start_inactive: bool,
 
