@@ -99,10 +99,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         const KEYPRESS_DOWN: i32 = 1;
 
         tokio::select! {
-            _ = hotplug_stream.next() => {
-                println!("Device (un)plugged, re-opening.");
-                events = open_keyboard_event_stream()
-            }
             Some((_, Ok(ev))) = events.next() => {
                 match ev.destructure() {
                     EventSummary::Key(_, code, KEYPRESS_DOWN) => {
@@ -121,6 +117,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                     _ => {}
                 }
+            }
+            _ = hotplug_stream.next() => {
+                println!("Device (un)plugged, re-opening.");
+                events = open_keyboard_event_stream()
             }
             _ = tokio::signal::ctrl_c() => { break }
             _ = sigterm.recv() => { break }
