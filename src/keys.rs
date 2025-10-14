@@ -6,8 +6,8 @@ pub struct KeyClasses {
 }
 
 static ACTIVATION_KEY_COMBO: [KeyCode; 4] = [
-    KeyCode::KEY_LEFTSHIFT,
     KeyCode::KEY_LEFTCTRL,
+    KeyCode::KEY_LEFTALT,
     KeyCode::KEY_LEFTMETA,
     KeyCode::KEY_S,
 ];
