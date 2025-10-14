@@ -1,5 +1,6 @@
 use clap::Parser;
-use evdev::{Device, EventSummary};
+use evdev::EventSummary;
+use inotify::{Inotify, WatchMask};
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
@@ -21,11 +22,6 @@ use keys::{KeyClasses, KeyState};
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Device node for the keyboard, e.g. /dev/input/event0.
-    /// If not specified, all devices will be polled for keyboard events.
-    #[arg(short, long)]
-    device: Option<String>,
-
     /// Number of the GPIO pin to pulse
     #[arg(short, long, default_value_t = 26)]
     pin: u8,
@@ -36,20 +32,28 @@ struct Args {
 
     /// Make GPIO pulses active at program startup
     #[arg(long)]
-    start_active: bool,
+    start_inactive: bool,
 
     /// By default, modifier keys and Esc don't cause a pulse. This flag makes them behave like regular keys.
     #[arg(long)]
     no_dead_keys: bool,
 }
 
-fn open_keyboard(devpath_arg: Option<String>) -> Result<Vec<Device>, std::io::Error> {
-    if let Some(devpath) = devpath_arg {
-        let dev = Device::open(devpath)?;
-        Ok(vec![dev])
-    } else {
-        Ok(evdev::enumerate().map(|t| t.1).collect())
-    }
+fn open_hotplug_stream() -> Result<inotify::EventStream<[u8; 4096]>, std::io::Error> {
+    let inotify = Inotify::init()?;
+    inotify.watches().add(
+        "/dev/input",
+        WatchMask::CREATE | WatchMask::DELETE,
+    )?;
+    inotify.into_event_stream([0; 4096])
+}
+
+fn open_keyboard_event_stream() -> StreamMap<usize, evdev::EventStream> {
+    evdev::enumerate()
+        .map(|t| t.1)
+        .filter_map(|dev| dev.into_event_stream().ok())
+        .enumerate()
+        .collect::<StreamMap<_, _>>()
 }
 
 async fn plopp(maybe_pin: Result<Pin, rppal::gpio::Error>, pulse_length: Duration) {
@@ -77,14 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pulse_length = Duration::from_micros(args.pulse_length_us);
     let key_classes = KeyClasses::new(args.no_dead_keys);
     let mut key_state = KeyState::new();
-    let mut plopp_active = args.start_active;
+    let mut plopp_active = !args.start_inactive;
 
-    let devices = open_keyboard(args.device)?;
-    let mut events = devices
-        .into_iter()
-        .filter_map(|dev| dev.into_event_stream().ok())
-        .enumerate()
-        .collect::<StreamMap<_, _>>();
+    let mut hotplug_stream = open_hotplug_stream()?;
+    let mut events = open_keyboard_event_stream();
 
     let gpio = Gpio::new()?;
     // init: configure so that transistor's gate is always driven into the ground when no keys are pressed.
@@ -99,6 +99,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         const KEYPRESS_DOWN: i32 = 1;
 
         tokio::select! {
+            _ = hotplug_stream.next() => {
+                println!("Device (un)plugged, re-opening.");
+                events = open_keyboard_event_stream()
+            }
             Some((_, Ok(ev))) = events.next() => {
                 match ev.destructure() {
                     EventSummary::Key(_, code, KEYPRESS_DOWN) => {

@@ -8,9 +8,10 @@ default = [ "gpio" ]
 gpio = [ ]
 
 [dependencies]
-clap = { version = "4.5.42", features = [ "derive" ] }
-evdev = { version = "0.13.1", features = [ "stream-trait", "tokio" ] }
+clap = { version = "4.5.49", features = [ "derive" ] }
+evdev = { version = "0.13.2", features = [ "stream-trait", "tokio" ] }
+inotify = { version = "0.11.0" }
 rppal = { version = "0.22.1" }
-tokio = { version = "1", features = [ "full" ] }
+tokio = { version = "1.47.1", features = [ "full" ] }
 tokio-stream = { version = "0.1.17" }
 tokio-util = { version = "0.7.16", features = [ "rt" ] }
