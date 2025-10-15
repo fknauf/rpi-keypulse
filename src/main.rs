@@ -1,6 +1,7 @@
 use clap::Parser;
 use evdev::EventSummary;
 use inotify::{Inotify, WatchMask};
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
@@ -47,11 +48,9 @@ fn open_hotplug_stream() -> Result<inotify::EventStream<[u8; 4096]>, std::io::Er
     inotify.into_event_stream([0; 4096])
 }
 
-fn open_keyboard_event_stream() -> StreamMap<usize, evdev::EventStream> {
+fn open_keyboard_event_stream() -> StreamMap<PathBuf, evdev::EventStream> {
     evdev::enumerate()
-        .map(|t| t.1)
-        .filter_map(|dev| dev.into_event_stream().ok())
-        .enumerate()
+        .filter_map(|(path, dev)| Some((path, dev.into_event_stream().ok()?)))
         .collect::<StreamMap<_, _>>()
 }
 
